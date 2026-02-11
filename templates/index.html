@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Legal AI Voice Assistant</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            text-align: center;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        h2 {
+            color: white;
+            font-size: 2.5rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+
+        .subtitle {
+            color: rgba(255,255,255,0.9);
+            font-size: 1.1rem;
+            margin-bottom: 3rem;
+            font-weight: 300;
+        }
+
+        button {
+            background: white;
+            color: #667eea;
+            border: none;
+            padding: 18px 45px;
+            font-size: 1.2rem;
+            font-weight: 600;
+            border-radius: 50px;
+            cursor: pointer;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 15px 40px rgba(0,0,0,0.3);
+            background: linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%);
+        }
+
+        button:active {
+            transform: translateY(-1px);
+        }
+
+        .mic-icon {
+            font-size: 1.5rem;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+        }
+
+        /* Modal */
+        #voiceModal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(10px);
+            z-index: 1000;
+            animation: fadeInModal 0.3s ease-out;
+        }
+
+        @keyframes fadeInModal {
+            from {
+                opacity: 0;
+            }
+            to {
+                opacity: 1;
+            }
+        }
+
+        #modalContent {
+            background: white;
+            width: 90%;
+            max-width: 500px;
+            margin: 10% auto;
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: slideUp 0.4s ease-out;
+            position: relative;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(50px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        #status {
+            font-weight: 600;
+            font-size: 1.3rem;
+            margin-bottom: 25px;
+            color: #667eea;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .listening-indicator {
+            width: 12px;
+            height: 12px;
+            background: #667eea;
+            border-radius: 50%;
+            animation: blink 1.4s infinite;
+        }
+
+        @keyframes blink {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.3;
+            }
+        }
+
+        #transcript {
+            min-height: 120px;
+            max-height: 200px;
+            overflow-y: auto;
+            border: 2px solid #e0e7ff;
+            background: #f8f9ff;
+            padding: 20px;
+            margin-bottom: 25px;
+            border-radius: 12px;
+            font-size: 1.05rem;
+            line-height: 1.6;
+            color: #333;
+            text-align: left;
+        }
+
+        #transcript::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        #transcript::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        #transcript::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 10px;
+        }
+
+        #modalContent button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 14px 40px;
+            font-size: 1rem;
+            border-radius: 30px;
+            transition: all 0.3s ease;
+        }
+
+        #modalContent button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
+        }
+
+        .wave-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            margin: 20px 0;
+        }
+
+        .wave-bar {
+            width: 4px;
+            height: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 2px;
+            animation: wave 1s ease-in-out infinite;
+        }
+
+        .wave-bar:nth-child(2) {
+            animation-delay: 0.1s;
+        }
+
+        .wave-bar:nth-child(3) {
+            animation-delay: 0.2s;
+        }
+
+        .wave-bar:nth-child(4) {
+            animation-delay: 0.3s;
+        }
+
+        .wave-bar:nth-child(5) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes wave {
+            0%, 100% {
+                transform: scaleY(1);
+            }
+            50% {
+                transform: scaleY(2);
+            }
+        }
+
+        @media (max-width: 768px) {
+            h2 {
+                font-size: 2rem;
+            }
+
+            button {
+                padding: 15px 35px;
+                font-size: 1rem;
+            }
+
+            #modalContent {
+                margin: 20% auto;
+                padding: 30px 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>⚖️ Legal AI Voice Assistant</h2>
+    <p class="subtitle">Your intelligent legal companion powered by AI</p>
+    
+    <button onclick="startVoice()">
+        <span class="mic-icon">🎤</span>
+        Start Speaking
+    </button>
+</div>
+
+<!-- Voice Modal -->
+<div id="voiceModal">
+    <div id="modalContent">
+        <div id="status">
+            <span class="listening-indicator"></span>
+            Listening...
+        </div>
+        
+        <div class="wave-container">
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+            <div class="wave-bar"></div>
+        </div>
+        
+        <div id="transcript"></div>
+        
+        <button onclick="stopVoice()">Stop & Process</button>
+    </div>
+</div>
+
+<script>
+    let recognition;
+    let finalTranscript = "";
+
+    function startVoice() {
+        finalTranscript = "";
+        document.getElementById("transcript").innerText = "";
+        document.getElementById("status").innerText = "Listening...";
+        document.getElementById("voiceModal").style.display = "block";
+
+        recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+        recognition.lang = "en-IN";
+        recognition.interimResults = true;
+
+        recognition.onresult = (event) => {
+            let interim = "";
+            for (let i = event.resultIndex; i < event.results.length; i++) {
+                const text = event.results[i][0].transcript;
+                if (event.results[i].isFinal) {
+                    finalTranscript += text;
+                } else {
+                    interim += text;
+                }
+            }
+            document.getElementById("transcript").innerText = finalTranscript + interim;
+        };
+
+        recognition.onerror = () => {
+            alert("Voice recognition error");
+            closeModal();
+        };
+
+        recognition.start();
+    }
+
+    function stopVoice() {
+        recognition.stop();
+        document.getElementById("status").innerText = "Processing...";
+
+        if (!finalTranscript.trim()) {
+            alert("No speech detected. Please try again.");
+            closeModal();
+            return;
+        }
+
+        sendToBackend(finalTranscript);
+    }
+
+    function sendToBackend(text) {
+        fetch("/predict", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text })
+        })
+        .then(res => res.json())
+        .then(data => {
+            speak(data.spoken_response);
+            closeModal();
+        })
+        .catch(() => {
+            alert("Server error");
+            closeModal();
+        });
+    }
+
+    function speak(text) {
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.rate = 0.9;
+        utterance.pitch = 1.1;
+        utterance.volume = 1;
+
+        const voices = speechSynthesis.getVoices();
+        utterance.voice = voices.find(v =>
+            v.name.includes("Google") && v.lang === "en-US"
+        ) || voices[0];
+
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function closeModal() {
+        document.getElementById("voiceModal").style.display = "none";
+    }
+</script>
+
+
+</body>
+</html>
