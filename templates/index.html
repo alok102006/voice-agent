@@ -275,6 +275,8 @@
         <span class="mic-icon">🎤</span>
         Start Speaking
     </button>
+    <button onclick="resetConversation()">Reset Conversation</button>
+
 </div>
 
 <!-- Voice Modal -->
@@ -302,50 +304,67 @@
 <script>
     let recognition;
     let finalTranscript = "";
+    let isConversationActive = false;
 
     function startVoice() {
+        isConversationActive = true;
+        listen();
+    }
+
+    function listen() {
         finalTranscript = "";
-        document.getElementById("transcript").innerText = "";
+        let silenceTimer;
+
         document.getElementById("status").innerText = "Listening...";
-        document.getElementById("voiceModal").style.display = "block";
 
         recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
         recognition.lang = "en-IN";
         recognition.interimResults = true;
+        recognition.continuous = true;
 
         recognition.onresult = (event) => {
-            let interim = "";
+            let transcript = "";
+
             for (let i = event.resultIndex; i < event.results.length; i++) {
-                const text = event.results[i][0].transcript;
-                if (event.results[i].isFinal) {
-                    finalTranscript += text;
-                } else {
-                    interim += text;
-                }
+                transcript += event.results[i][0].transcript;
             }
-            document.getElementById("transcript").innerText = finalTranscript + interim;
+
+            finalTranscript = transcript;
+
+        // 🔥 Reset silence timer whenever user speaks
+            clearTimeout(silenceTimer);
+            silenceTimer = setTimeout(() => {
+                recognition.stop();
+            }, 3500); // wait 2.5 seconds after user stops talking
         };
 
-        recognition.onerror = () => {
-            alert("Voice recognition error");
-            closeModal();
+        recognition.onend = () => {
+            if (!isConversationActive) return;
+
+            if (finalTranscript.trim() === "") {
+                listen();
+                return;
+            }
+
+        // Stop keywords
+            if (
+                finalTranscript.toLowerCase().includes("stop") ||
+                finalTranscript.toLowerCase().includes("exit") ||
+                finalTranscript.toLowerCase().includes("thank you")
+            ) {
+                speak("Okay. Ending conversation. Take care.");
+                isConversationActive = false;
+                closeModal();
+                return;
+            }
+
+            document.getElementById("status").innerText = "Processing...";
+            sendToBackend(finalTranscript);
         };
 
         recognition.start();
     }
 
-    function stopVoice() {
-        recognition.stop();
-        document.getElementById("status").innerText = "Processing...";
-
-        if (!finalTranscript.trim()) {
-            alert("No speech detected. Please try again.");
-            closeModal();
-            return;
-        }
-
-        sendToBackend(finalTranscript);
-    }
 
     function sendToBackend(text) {
         fetch("/predict", {
@@ -355,35 +374,74 @@
         })
         .then(res => res.json())
         .then(data => {
-            speak(data.spoken_response);
-            closeModal();
+            speakResponse(data);
         })
         .catch(() => {
-            alert("Server error");
-            closeModal();
+            speak("Sorry, I couldn't process your request.");
+            listen();
         });
+    }
+
+    function speakResponse(data) {
+        const message = `
+            Based on what you said, this seems to be a ${data.category} case.
+            ${data.explanation}.
+            My advice is: ${data.advice.join(". ")}.
+            Do you need more help?
+        `;
+
+        speak(message);
     }
 
     function speak(text) {
         window.speechSynthesis.cancel();
 
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.rate = 0.9;
-        utterance.pitch = 1.1;
+        utterance.rate = 0.85;
+        utterance.pitch = 1;
         utterance.volume = 1;
 
-        const voices = speechSynthesis.getVoices();
-        utterance.voice = voices.find(v =>
-            v.name.includes("Google") && v.lang === "en-US"
-        ) || voices[0];
+        let voices = speechSynthesis.getVoices();
 
-        window.speechSynthesis.speak(utterance);
+        function setVoice() {
+            const preferred = voices.find(v =>
+                v.name.includes("Google") && v.lang.includes("en")
+            );
+            utterance.voice = preferred || voices[0];
+        }
+
+        if (!voices.length) {
+            speechSynthesis.onvoiceschanged = () => {
+                voices = speechSynthesis.getVoices();
+                setVoice();
+                speechSynthesis.speak(utterance);
+            };
+        } else {
+            setVoice();
+            speechSynthesis.speak(utterance);
+        }
+
+        // 🔥 After AI finishes speaking → listen again
+        utterance.onend = () => {
+            if (isConversationActive) {
+                listen();
+            }
+        };
     }
 
     function closeModal() {
         document.getElementById("voiceModal").style.display = "none";
     }
+    function resetConversation() {
+        fetch("/reset", { method: "POST" })
+        .then(() => {
+            alert("Conversation reset!");
+    });
+}
+
 </script>
+
+
 
 
 </body>

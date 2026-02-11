@@ -1,19 +1,69 @@
 from flask import Flask, request, jsonify, render_template
-import joblib
-
 from chatbot.legal_advice import get_legal_advice
-from ml.predict import apply_refinement, generate_explanation
-
-MODEL_PATH = "models/legal_classifier.pkl"
-VECTORIZER_PATH = "models/tfidf_vectorizer.pkl"
+from ml.predict import predict_legal_issue, generate_explanation
 
 app = Flask(__name__)
 
-model = joblib.load(MODEL_PATH)
-vectorizer = joblib.load(VECTORIZER_PATH)
+# 🔁 Conversation Memory
+conversation_state = {
+    "current_category": None
+}
 
 
-@app.route("/", methods=["GET"])
+# 🔎 Detect Follow-Up Intent
+def is_followup(text):
+    text_lower = text.lower()
+
+    # If a category already exists and the user
+    # is asking about documents, next steps, questions etc.
+    followup_keywords = [
+        "document", "documents", "paper", "papers",
+        "carry", "bring",
+        "ask", "question",
+        "next", "proceed",
+        "what should", "how should",
+        "what do i need"
+    ]
+
+    return any(keyword in text_lower for keyword in followup_keywords)
+
+
+
+# 🧠 Generate Follow-Up Response
+def generate_followup_response(category, text):
+    text_lower = text.lower()
+
+    if "document" in text_lower or "carry" in text_lower:
+        return [
+            "Carry valid identity proof (Aadhaar / PAN / Passport).",
+            "Bring all agreements or contracts related to your case.",
+            "Collect emails, SMS, or bank statements as evidence.",
+            "Prepare a clear written timeline of events."
+        ]
+
+    if "ask" in text_lower:
+        return [
+            "Ask about legal strategy.",
+            "Ask about case timeline.",
+            "Ask about total legal cost.",
+            "Ask about possible risks and outcomes."
+        ]
+
+    if "next" in text_lower or "proceed" in text_lower:
+        return [
+            "File an official complaint if not done.",
+            "Preserve all available evidence.",
+            "Consult a specialized lawyer.",
+            "Avoid public discussion of the case."
+        ]
+
+    return [
+        f"This appears to be related to {category} law.",
+        "Please provide more specific details."
+    ]
+
+
+@app.route("/")
 def home():
     return render_template("index.html")
 
@@ -21,56 +71,46 @@ def home():
 @app.route("/predict", methods=["POST"])
 def predict():
     data = request.get_json()
-    text = data.get("text", "")
 
-    text_vector = vectorizer.transform([text])
-    probabilities = model.predict_proba(text_vector)[0]
+    if not data or "text" not in data:
+        return jsonify({"error": "Text is required"}), 400
 
-    label = model.classes_[probabilities.argmax()]
-    confidence = probabilities.max()
+    text = data["text"]
+    print("Incoming Text:", text)
+    print("Current Stored Category:", conversation_state["current_category"])
 
-    refined_label, refined_confidence = apply_refinement(
-        text, label, confidence
-    )
 
-    explanation = generate_explanation(text, refined_label)
-    advice = get_legal_advice(refined_label)
+    # 🔁 Follow-Up Handling
+    if conversation_state["current_category"] and is_followup(text):
 
-    spoken_response = build_human_response(
-        refined_label, explanation, advice
-    )
+        category = conversation_state["current_category"]
+        explanation = "Follow-up question detected under existing case."
+        advice = generate_followup_response(category, text)
+        confidence = 1.0
+
+    else:
+        result = predict_legal_issue(text)
+
+        category = result["category"]
+        confidence = result["confidence"]
+
+        conversation_state["current_category"] = category
+
+        explanation = generate_explanation(text, category)
+        advice = get_legal_advice(category)
+    
+    
+    conversation_state["current_category"] = category
+    print("Updated Stored Category:", conversation_state["current_category"])
+
 
     return jsonify({
-        "category": refined_label,
-        "confidence": round(refined_confidence, 2),
+        "category": category,
+        "confidence": round(confidence, 2),
         "explanation": explanation,
-        "advice": advice,
-        "spoken_response": spoken_response
+        "advice": advice
     })
 
 
-def build_human_response(category, explanation, advice):
-    """
-    Purely human-friendly response for voice agent
-    """
-
-    opening = {
-        "CYBER": "I understand this can be stressful. This sounds like a cyber crime issue.",
-        "CRIMINAL": "I understand your concern. This appears to be a criminal law matter.",
-        "EMPLOYMENT": "I understand the situation. This looks like an employment related issue.",
-        "FAMILY": "I understand this is sensitive. This appears to be a family law matter.",
-        "PROPERTY": "I understand your concern. This seems to be a property related issue."
-    }.get(category, "I understand your concern. This is a legal issue.")
-
-    advice_sentence = " ".join(advice[:2])
-
-    return (
-        f"{opening} "
-        f"{explanation}. "
-        f"What you should do now is the following. "
-        f"{advice_sentence}"
-    )
-
-
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=False)
